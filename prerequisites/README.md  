@@ -1,0 +1,58 @@
+Comparative Study of Multivariable Linear Regression
+
+This project compares three implementations of multivariable linear regression for predicting median house prices using the California Housing dataset. The three methods are:
+
+- Pure Python (using loops and lists)
+- NumPy Vectorized Implementation
+- Scikit-learn (using `LinearRegression`)
+
+Dataset
+
+ Dataset: California Housing Dataset
+  Link: [https://www.dcc.fc.up.pt/\~ltorgo/Regression/cal\_housing.html](https://www.dcc.fc.up.pt/~ltorgo/Regression/cal_housing.html)
+ Preprocessing:
+
+  * Dropped missing values
+  * Encoded `ocean_proximity` as integers
+  * Normalized features using training set stats
+  * Fixed random seed used for consistent train/test split
+
+Evaluation Metrics
+
+* Mean Absolute Error (MAE)
+* Root Mean Squared Error (RMSE)
+* R² Score
+* Training/Convergence Time
+
+How to Run
+1. Install dependencies:
+   pip install -r requirements.txt
+
+
+2. Run each model:
+   python pure_python_prob1.ipynb
+   python numpy_prob2.py
+   python sklearn_prob3.py
+
+
+Learning Resources Used
+
+* Keith Galli – Intro to Pandas: [https://youtu.be/vmEHCJofslg](https://youtu.be/vmEHCJofslg)
+* Kaggle – Pandas Course: [https://www.kaggle.com/learn/pandas](https://www.kaggle.com/learn/pandas)
+* NumPy Crash Course: [https://youtu.be/4c\_mwnYdbhQ](https://youtu.be/4c_mwnYdbhQ)
+* Matplotlib Tutorial: [https://www.youtube.com/watch?v=0P7QnIQDBJY](https://www.youtube.com/watch?v=0P7QnIQDBJY)
+* Kaggle – Data Visualization: [https://www.kaggle.com/learn/data-visualization](https://www.kaggle.com/learn/data-visualization)
+* FreeCodeCamp – Data Cleaning with Pandas: [https://www.youtube.com/watch?v=vmEHCJofslg](https://www.youtube.com/watch?v=vmEHCJofslg)
+
+Notes
+
+* Although Scikit-learn uses OLS and doesn't require normalization, it was applied for fair comparison.
+* Pure Python is slower due to lack of vectorization.
+* I used an LLM (ChatGPT) to figure out feature normalization when my model started diverging due to exploding gradients.
+
+---
+
+Author: Abhishek Kumar Chaubey
+Institute: IIT (BHU) Varanasi
+
+---

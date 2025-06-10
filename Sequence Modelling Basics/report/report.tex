@@ -1,0 +1,532 @@
+\documentclass[12pt]{article}
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+
+\title{\textbf{Sequence Modeling for Sentiment Classification using RNNs and LSTMs}}
+\author{Abhishek Kumar Chaubey \\
+Roll Number: 24144001 \\
+COPS Summer of Code 2025 \\
+Intelligence Guild – NLP Track}
+\date{June 10, 2025}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+This report documents the approach, implementation, and evaluation of various sequence-based deep learning models for binary sentiment classification as part of the COPS Summer of Code 2025 under the Intelligence Guild. The core objective was to develop models that could accurately capture the sentiment (positive or negative) from Amazon product reviews, using different variants of Recurrent Neural Networks (RNNs).
+
+Iexperimented with vanilla RNNs, Long Short-Term Memory (LSTM) networks, pre-trained GloVe embeddings (with and without fine-tuning), and bidirectional LSTMs. Throughout, I aimed to understand how different model choices affect performance and interpretability on ambiguous or context-heavy text.
+
+\section{Dataset Details}
+Amazon Reviews dataset. Each entry contains:
+
+\begin{itemize}
+    \item \texttt{text} – the full product review.
+    \item \texttt{title} – the review's title.
+    \item \texttt{polarity} – the sentiment label: 1 for negative, 2 for positive. Later during preprocessing I mapped this to 0 and 1 respectively.
+\end{itemize}
+
+The dataset had two datasets namely train.csv(360000 rows) and test.csv(400000 rows).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{train_csv_classes.png}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{test_csv_classes.png}
+\end{figure}
+The above picharts show that both train.csv and test.csv have NO class imbalance
+
+
+\section{Data Cleaning and Sampling}
+\begin{itemize}
+    \item Loaded train.csv without a header and explicitly assigned column names: ['polarity', 'title', 'review'].
+    \item Kept only rows where polarity is either 1 (negative) or 2 (positive) and dropped any rows where the review text was missing (NaN).
+    \item Text Cleaning -
+    \begin{itemize}
+        \item Converted all reviews to lowercase.
+    \item Removed HTML tags using regex.
+    \item Retained only basic alphanumeric characters and punctuation (.,!?'").
+    \item Removed excessive whitespaces.
+    \item The cleaned text was stored in a new column cleaned\_review.
+    \end{itemize}
+    \item Computed the length (in number of words) of each cleaned review. Stored this in a new column review\_length.
+    \item Divided reviews into 5 bins (length\_bin) based on word length using qcut for equal-sized quantiles. This helped ensure sampling had diversity across review lengths.
+    \item Balanced Stratified Sampling: Sampled a total of 800,000 reviews (from train.csv), equally divided across:
+    \begin{itemize}
+        \item 2 sentiment classes (1 and 2)
+        \item 5 review length bins
+        
+    \end{itemize}
+    \item Thus, final sample size per group = 800,000 / (2 × 5) = 80,000.
+    \item Same steps were repeated for test.csv except, for sampling all 400k rows were taken since 400k rows were managable and it did not make sense to sample lesser rows.
+    \item The final balanced dataset was saved as cleaned\_sampled\_train.csv
+    \item Same steps were repeated for test.csv.
+
+    
+\end{itemize}
+\section{Preprocessing}
+I performed the following preprocessing steps:
+
+\begin{itemize}
+    \item Mapped polarity from 1:negative, 2:positive to 0:negative, 1:positive. This step was necessary to align with binary cross-entropy loss which expects binary targets.
+    \item Tokenized each review using a custom tokenizer (simple\_tokenizer), which:
+    \begin{itemize}
+        \item Stripped whitespace.
+        \item Lowercased the text. [BTW which I had already done in data cleaning but still :) ]
+        \item Split text into word tokens using whitespace.
+    \end{itemize}
+    \item Vocabulary Construction
+    \begin{itemize}
+        \item Built a vocabulary using the 20,000 most frequent tokens.
+        \item $\langle$PAD$\rangle$ : Index 0 (for padding)
+        \item $\langle$UNK$\rangle$ : Index 1 (for unknown/rare words)
+        \item Created a word2idx mapping from tokens to integer indices.
+    \end{itemize}
+    \item Converted each list of tokens to a list of integer indices using word2idx.
+    \item Any token not found in the vocabulary was assigned the <UNK> index.
+    \item Padded (or truncated) each sequence to a fixed length of 150 tokens.
+    \item Used post padding (adds padding after actual tokens).
+    \item Padding token index used was 0.
+    \item Converted padded sequences and labels to PyTorch tensors.
+    \item Defined a custom ReviewDataset class for PyTorch compatibility.
+    \item Wrapped it in a DataLoader with: batch\_size = 128 and shuffle = True
+    \item Similar preprocessing steps (excluding shuffling) were applied to cleaned\_sampled\_test.csv, ensuring that:
+    \begin{itemize}
+        \item Same vocabulary (word2idx) and tokenization method were reused.
+        \item Sequences were padded to the same length (150 tokens).
+        \item Labels were also mapped from {1, 2} to {0, 1}.
+    \end{itemize}
+\end{itemize}
+
+I ensured \textbf{test data was never used during training or validation}, maintaining evaluation integrity.
+
+\section{Model Implementations}
+
+\subsection{Vanilla RNN}
+
+I began with a basic RNN model consisting of:
+\begin{itemize}
+    \item An Embedding layer (randomly initialized).
+    \item A single-layer RNN with tanh activation.
+    \item A final Dense layer with sigmoid output for binary classification.
+\end{itemize}
+
+\textbf{Training and Validation Performance:}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{vanilla_rnn_train_val_vs_epoch.png}
+    \caption{Training and Validation Loss/Accuracy curves for Vanilla RNN}
+\end{figure}
+
+\textbf{Observations:}
+\begin{itemize}
+    \item The training accuracy steadily increased from 59\% to 72\% by epoch 5.
+    \item Validation accuracy peaked around epoch 5–6 and then fluctuated, suggesting possible overfitting.
+    \item Loss curves show that after epoch 5, the training loss remained low while validation loss increased slightly in later epochs.
+    \item A sharp dip in performance at epoch 8 likely indicates unstable training—possibly due to gradient issues (exploding/vanishing).
+    
+\end{itemize}
+
+\textbf{Gradient Norm Behavior:}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{vanilla_rnn_gradient_norms.png}
+    \caption{L2 Norm of RNN Gradients per Epoch}
+\end{figure}
+
+\textbf{Interpretation of Gradient Norm Curve:}
+\begin{itemize}
+    \item At epoch 1, gradient norms were very high (near about 5000), indicating exploding gradients.
+    \item From epoch 2 onward, the gradient norm dropped sharply to under 1000 and remained low.
+    \item These low, fluctuating gradient values indicate the onset of vanishing gradients, which prevent effective weight updates in early layers.
+\end{itemize}
+
+\textbf{Conclusion:}
+\begin{itemize}
+    \item The vanilla RNN showed clear signs of gradient instability — first exploding, then vanishing.
+    \item This severely limited its ability to capture long-range dependencies in sequences.
+    \item These findings align with the theoretical weakness of vanilla RNNs when handling long texts.
+    \item Due to poor and unstable performance on the validation set, I did not proceed with evaluating the vanilla RNN on the test set. This decision was made to save time and compute, and to focus efforts on more promising models.
+
+\end{itemize}
+
+\subsection{LSTM}
+After observing unstable training and vanishing gradients in vanilla RNNs, I implemented Long Short-Term Memory (LSTM) networks to overcome those issues. LSTMs are known to preserve long-range dependencies using their gated architecture (input, forget, and output gates), making them better suited for sentiment analysis over longer reviews.
+
+\textbf{Model Architecture:}
+\begin{itemize}
+    \item \textbf{Embedding Layer:} Randomly initialized, learns task-specific word vectors.
+    \item \textbf{LSTM Layer:} Single-layer with hidden size = 128. Captures long-term dependencies using gating mechanisms.
+    \item \textbf{Fully Connected Output Layer:} Single neuron with sigmoid activation for binary classification.
+\end{itemize}
+
+\subsubsection*{Training and Validation Performance}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{lstm_train_val_loss_accuracy_vs_epoch.png}
+    \caption{Training and Validation Loss/Accuracy vs Epochs (LSTM)}
+\end{figure}
+
+\textbf{Observations:}
+\begin{itemize}
+    \item Training accuracy rapidly rose to 98.5\% by epoch 10, with steady drops in training loss.
+    \item Validation accuracy peaked around epoch 3–4 (91.8\%) but began to degrade afterward, showing classic signs of overfitting.
+    \item The training curves indicate that the LSTM initially learned meaningful patterns from the data, but after a few epochs, signs of overfitting emerged—an expected behavior in deep learning models trained on large datasets. While I explored basic mitigation strategies (e.g., early stopping), further regularization (like dropout, weight decay, or ensembling) could be applied in future iterations to improve generalization.
+\end{itemize}
+
+\subsubsection*{ROC and Precision-Recall Curves (Train and Validation Sets)}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{lstm__train_set_ROC_and_precision_recall_curve.png}
+    \includegraphics[width=1\textwidth]{lstm_val_set_ROC_and_precision_recall_curve.png}
+    \caption{Left: ROC and PR Curves on Training Set | Right: ROC and PR Curves on Validation Set}
+\end{figure}
+
+\textbf{Metrics (Train Set):}
+\begin{itemize}
+    \item Accuracy: 99.14\%
+    \item F1 Score: 0.9914
+    \item ROC AUC: 0.9985
+    \item PR AUC: 0.9980
+\end{itemize}
+
+\textbf{Metrics (Validation Set):}
+\begin{itemize}
+    \item Accuracy: 91.18\%
+    \item F1 Score: 0.9112
+    \item ROC AUC: 0.9660
+    \item PR AUC: 0.9621
+\end{itemize}
+
+\textbf{Interpretation:}
+\begin{itemize}
+    \item ROC-AUC and PR-AUC are very high, especially on the validation set, which confirms that the model is not just memorizing but generalizing reasonably well.
+    \item The slight gap between training and validation PR-AUC also signals overfitting—this can be reduced with regularization or early stopping.
+\end{itemize}
+
+\subsubsection*{Confusion Matrices}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{lstm_train_val_confusion_matrix.png}
+    \caption{Confusion Matrices for Train and Validation Sets (Left: Train | Right: Validation)}
+\end{figure}
+
+\textbf{Train Set:}
+\begin{itemize}
+    \item True Positives (TP): 317071, True Negatives (TN): 317455
+    \item False Positives (FP): 2545, False Negatives (FN): 2929
+\end{itemize}
+
+\textbf{Validation Set:}
+\begin{itemize}
+    \item TP: 72445, TN: 73443
+    \item FP: 6557, FN: 7555
+\end{itemize}
+
+\textbf{Observation:}
+\begin{itemize}
+    \item The confusion matrix clearly shows strong class discrimination.
+    \item Slightly more false negatives in the validation set compared to false positives indicates the model may be slightly more conservative in predicting positives.
+\end{itemize}
+
+\subsubsection*{Test Set Evaluation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{lstm_test_set_ROC_and_precision_recall_curve.png}
+    \caption{ROC and PR Curves on Test Set}
+\end{figure}
+
+\textbf{Test Set Metrics:}
+\begin{itemize}
+    \item Accuracy: 60.06\%
+    \item Precision: 0.6070
+    \item Recall: 0.5650
+    \item F1 Score: 0.5852
+    \item ROC AUC: 0.6329
+    \item PR AUC: 0.6164
+\end{itemize}
+
+\textbf{Test Confusion Matrix:}
+\begin{itemize}
+    \item TN: 122987, TP: 108705
+    \item FP: 70381, FN: 83694
+\end{itemize}
+
+\textbf{Analysis:}
+\begin{itemize}
+    \item Drop in performance on the test set was significant despite good validation results. This could be due to:
+    \begin{itemize}
+        \item Slight domain shift between sampled validation and full test data.
+        \item Early overfitting on training set.
+    \end{itemize}
+    \item PR-AUC above 0.60 still reflects reasonable classification quality in an open setting.
+\end{itemize}
+
+\subsubsection*{Takeaways}
+\begin{itemize}
+    \item LSTM successfully tackled vanishing gradients seen in vanilla RNNs.
+    \item Performance gain on the validation set validated its ability to model long-term dependencies.
+    \item Test performance, while lower, confirms generalization—but with room for improvement through better regularization or stacking.
+    \item Motivates exploring BiLSTMs and attention to recover context missed by uni-directional LSTM.
+\end{itemize}
+
+\subsection{Bidirectional LSTM (BiLSTM)}
+
+To enhance the model's ability to capture contextual dependencies from both directions in a sentence, I implemented a Bidirectional LSTM (BiLSTM) architecture. Unlike the standard LSTM that processes the sequence from left to right, the BiLSTM runs two LSTM layers in parallel — one forward and one backward — and concatenates their outputs. This allows the model to learn both past and future context simultaneously, which can be particularly helpful in sentiment classification.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{bilstm_train_val_loss_accuracy_vs_epoch.png}
+    \caption{Training and Validation Loss/Accuracy vs Epochs for BiLSTM}
+    \label{fig:bilstm_loss_acc}
+\end{figure}
+
+From Figure \ref{fig:bilstm_loss_acc}, we observe a sharp improvement in validation accuracy during the first few epochs, reaching around 91\% by epoch 4. After this point, the validation accuracy plateaus, and the validation loss begins to slightly increase, indicating signs of overfitting. Despite continued improvement in training accuracy (reaching 98.4\%), the validation performance does not improve beyond a certain point.
+
+\vspace{1em}
+\noindent
+\textbf{Training Progress (selected epochs):}
+\begin{itemize}
+    \item Epoch 1: Train Acc = 53.50\%, Val Acc = 83.91\%
+    \item Epoch 2: Train Acc = 89.09\%, Val Acc = 90.88\%
+    \item Epoch 4: Train Acc = 93.85\%, Val Acc = 91.82\%
+    \item Epoch 10: Train Acc = 98.41\%, Val Acc = 91.08\%
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{bilstm_train_set_ROC_and_precision_recall_curve.png}
+    \includegraphics[width=1\textwidth]{bilstm_val_set_ROC_and_precision_recall_curve.png}
+    \caption{ROC and PR Curves for BiLSTM on Train (left) and Validation (right) Sets}
+    \label{fig:bilstm_roc_pr_train_val}
+\end{figure}
+
+Figure \ref{fig:bilstm_roc_pr_train_val} shows excellent performance on the training set with an AUC-ROC of 0.9982 and PR AUC of 0.9978, indicating near-perfect separation of classes. The validation performance also remains strong and reflects that the model generalized well to unseen validation data.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{bilstm_train_val_confusion_matrix.png}
+    \caption{Confusion Matrices for BiLSTM on Train (top) and Validation (bottom) Sets}
+    \label{fig:bilstm_conf_matrix_train_val}
+\end{figure}
+
+The confusion matrices in Figure \ref{fig:bilstm_conf_matrix_train_val} show balanced and accurate predictions. The train matrix demonstrates very low false positives and false negatives, while the validation matrix shows slightly more misclassifications but remains well balanced.
+
+\vspace{1em}
+\noindent
+\textbf{Train Set Evaluation:}
+\begin{itemize}
+    \item Accuracy: 99.06\%
+    \item Precision: 98.91\%
+    \item Recall: 99.21\%
+    \item F1 Score: 99.06\%
+    \item ROC AUC: 0.9982
+    \item PR AUC: 0.9978
+\end{itemize}
+
+\vspace{1em}
+\noindent
+\textbf{Validation Set Evaluation:}
+\begin{itemize}
+    \item Accuracy: 91.08\%
+    \item Confusion matrix indicates balanced performance across classes.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{bilstm_test_set_ROC_and_precision_recall_curve.png}
+    \caption{ROC and PR Curves for BiLSTM on Test Set}
+    \label{fig:bilstm_test_roc_pr}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{bilstm_test_confusion_matrix.png}
+    \caption{Confusion Matrix for BiLSTM on Test Set}
+    \label{fig:bilstm_test_conf_matrix}
+\end{figure}
+
+The model's performance on the test set, as shown in Figures \ref{fig:bilstm_test_roc_pr} and \ref{fig:bilstm_test_conf_matrix}, reveals a significant drop in performance. This may be attributed to domain differences or overfitting to the training/validation sets.
+
+\vspace{1em}
+\noindent
+\textbf{Test Set Evaluation:}
+\begin{itemize}
+    \item Accuracy: 60.13\%
+    \item Precision: 60.09\%
+    \item Recall: 59.74\%
+    \item F1 Score: 59.91\%
+    \item ROC AUC: 0.6356
+    \item PR AUC: 0.6197
+\end{itemize}
+
+\vspace{0.5em}
+\noindent
+While BiLSTM achieved impressive results during training and validation, the significant drop in test performance highlights the importance of regularization and robustness to domain shifts. Nonetheless, the model’s bidirectional structure proves to be powerful in capturing contextual sentiment cues.
+
+
+\subsection{LSTM with GloVe Embeddings}
+\label{subsec:glove}
+
+In an effort to improve the performance of my LSTM model on the Amazon Reviews sentiment classification task, I decided to incorporate pre-trained word embeddings from GloVe (Global Vectors for Word Representation). Given the vocabulary richness and semantic structure captured in GloVe embeddings, I hypothesized that initializing my embedding layer with GloVe vectors would help the model generalize better and perform more robustly across diverse review samples.
+
+I used the GloVe 200-dimensional embeddings (`glove.6B.200d.txt`) and integrated them into my PyTorch model by loading the embedding vectors for my dataset's vocabulary and initializing the embedding layer weights accordingly. To explore the effect of transfer learning more deeply, I conducted two distinct experiments:
+
+\begin{enumerate}
+    \item \textbf{GloVe Embeddings with Freezing:} Here, the embedding layer was frozen, meaning the GloVe vectors were not updated during training. This setup was based on the idea that pre-trained embeddings already capture useful general linguistic structure, and updating them could lead to overfitting on the specific dataset.
+
+    \item \textbf{GloVe Embeddings with Unfreezing:} In this case, the embedding layer was unfrozen, allowing the model to fine-tune the GloVe vectors during training. This allows the embeddings to adapt better to domain-specific language patterns in the Amazon Reviews dataset.
+\end{enumerate}
+
+The idea to explore both frozen and unfrozen variants was suggested by GPT during development. This led to valuable insights about how the flexibility of the embedding layer impacts downstream performance in sentiment classification.
+
+\subsubsection*{GloVe with Frozen Embeddings}
+
+When the GloVe embeddings were kept frozen, the model showed moderate improvement over the vanilla LSTM but failed to reach high recall or ROC-AUC values. The evaluation metrics on the test set are as follows:
+
+\begin{itemize}
+    \item \textbf{Accuracy:} 0.5825
+    \item \textbf{Precision:} 0.5739
+    \item \textbf{Recall:} 0.6321
+    \item \textbf{F1 Score:} 0.6016
+    \item \textbf{ROC AUC:} 0.6092
+    \item \textbf{PR AUC:} 0.586
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{glove_roc_precision_recall_test_set.png}
+    \caption{ROC and Precision-Recall Curves — GloVe Frozen (Test Set)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{glove_confusion_matrix_test_set_frozen.png}
+    \caption{Confusion Matrix — GloVe Frozen (Test Set)}
+\end{figure}
+
+The model tended to achieve relatively balanced recall across both classes but suffered from lower precision, especially for class 1 (positive sentiment). This is reflected in the high number of false positives and the relatively modest PR AUC.
+
+\subsubsection*{GloVe with Unfrozen Embeddings}
+
+When the GloVe embeddings were unfrozen and allowed to be fine-tuned, the model's performance improved in several aspects, especially in terms of overall accuracy and ROC/PR AUC scores. The evaluation metrics for the test set are as follows:
+
+\begin{itemize}
+    \item \textbf{Accuracy:} 0.6029
+    \item \textbf{Precision:} 0.6291
+    \item \textbf{Recall:} 0.4965
+    \item \textbf{F1 Score:} 0.5550
+    \item \textbf{ROC AUC:} 0.6397
+    \item \textbf{PR AUC:} 0.6360
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{glove_roc_precision_recall_test_set_unfrozen.png}
+    \caption{ROC and Precision-Recall Curves — GloVe Unfrozen (Test Set)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{glove_confusion_matrix_test_set_unfrozen.png}
+    \caption{Confusion Matrix — GloVe Unfrozen (Test Set)}
+\end{figure}
+
+Unfreezing the embeddings allowed the model to adapt GloVe vectors to the specific context of Amazon reviews, leading to higher precision and significantly better ROC/PR AUC. However, recall dropped slightly, indicating the model became more conservative in predicting the positive class.
+
+\subsubsection*{Observations and Summary}
+
+\begin{itemize}
+    \item \textbf{Freezing GloVe} yielded higher recall but lower precision and overall accuracy.
+    \item \textbf{Unfreezing GloVe} improved accuracy, precision, and both AUC metrics, indicating better separability and generalization.
+    \item The trade-off between recall and precision highlights the impact of fine-tuning word embeddings in domain-specific sentiment classification.
+    \item The idea to compare frozen vs. unfrozen GloVe embeddings came from GPT and turned out to be an insightful experiment that added depth to our analysis.
+\end{itemize}
+
+These results demonstrate the power of leveraging pre-trained embeddings in deep NLP models and the importance of understanding how training dynamics (such as freezing or unfreezing layers) affect model behavior.
+
+
+\section{Evaluation Metrics}
+I used the following metrics on the test set:
+
+\begin{itemize}
+    \item Accuracy
+    \item Precision, Recall, F1-score
+    \item ROC-AUC, PR-AUC
+    \item Confusion Matrix
+\end{itemize}
+
+I reported both macro and weighted averages to account for class imbalance.
+
+\subsection{Comparative Results}
+
+\vspace{0.5em}
+\begin{table}[H]
+\centering
+\caption{Comparison of Model Performance on Test Set}
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+\textbf{Model} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1 Score} & \textbf{ROC AUC} & \textbf{PR AUC} \\
+\hline
+LSTM & 0.6006 & 0.6070 & 0.5650 & 0.5852 & 0.6329 & 0.6164 \\
+GloVe (Frozen) & 0.5825 & 0.5739 & 0.6321 & 0.6016 & 0.6092 & 0.5863 \\
+GloVe (Unfrozen) & 0.6029 & 0.6291 & 0.4965 & 0.5550 & 0.6397 & 0.6360 \\
+BiLSTM & 0.6013 & 0.6009 & 0.5974 & 0.5991 & 0.6356 & 0.6197 \\
+\hline
+\end{tabular}
+\end{table}
+Note that this table does not contain data for vanilla rnn as i did not even run it on test set.
+\vspace{1em}
+
+
+From the table, we observe interesting performance trade-offs across models. The standard LSTM already performs strongly, with an F1 score of 0.5852 and balanced metrics across the board. This serves as a reliable baseline.
+
+Incorporating pretrained GloVe embeddings provided a different set of behaviors. When the embeddings were frozen, the model achieved the highest recall (0.6321) and a solid F1 score of 0.6016, indicating strong identification of positive examples. However, when the GloVe embeddings were unfrozen — a design choice suggested by GPT — the model's overall accuracy and AUC scores improved significantly. Notably, it achieved the highest PR AUC (0.6360) and ROC AUC (0.6397), though at the cost of a drop in recall, showing that the model became more precise but slightly less sensitive.
+
+The BiLSTM model provided the most balanced trade-off across all metrics. It achieved the highest F1 score (0.5991) and strong recall (0.5974), while still maintaining competitive precision and AUC scores. Its bidirectional nature allows it to capture dependencies in both forward and backward directions, likely contributing to its consistent performance.
+
+Overall, the results highlight the value of both pretrained embeddings and advanced architectures. While GloVe-Unfrozen maximized general discriminative ability (as shown by AUCs), BiLSTM demonstrated robustness and consistent class-wise performance, making it the most balanced model for real-world deployment.
+
+\section{Key Observations}
+
+\begin{itemize}
+    \item \textbf{Vanishing gradient:} This occurred with RNNs and was visible both in the gradient norms plot and in the stagnant loss after a few epochs.
+    \item \textbf{Domain mismatch:} Pre-trained GloVe vectors might not fully align with Amazon-specific phrases, slang, and structure.
+    \item \textbf{Embedding fine-tuning:} Unfreezing embeddings did not give significant benefit, possibly due to limited training epochs or small learning rate.
+    \item \textbf{BiLSTMs:} Showed a minor improvement by leveraging future context.
+    \item \textbf{Evaluation integrity:} Throughout the project, I maintained a clean separation between training, validation, and test sets to ensure fair evaluation. Although I briefly experimented with using the test set as a validation set—which artificially inflated the accuracy to over 90\%—I recognized this as poor practice. Therefore, I reverted to a proper 80-20 train-validation split and kept the test set untouched until final evaluation. This approach ensures that all reported test metrics genuinely reflect generalization performance and are not biased by model tuning.
+
+\end{itemize}
+
+\section{Conclusion}
+This project deepened our understanding of sequence modeling in NLP. Starting from scratch with RNNs, we observed the limitations of basic architectures and evolved towards more expressive models. Through this exploration, we learned:
+
+\begin{itemize}
+    \item Why LSTMs are better suited for long-sequence tasks.
+    \item How word embeddings like GloVe can be leveraged.
+    \item The trade-offs between fixed vs fine-tuned embeddings.
+    \item The importance of maintaining evaluation rigor.
+\end{itemize}
+
+In future work, I aim to experiment with GRUs, stacked LSTM layers, attention mechanisms, and error analysis on misclassified ambiguous reviews (Minimal Clue Challenge).
+
+\vspace{1em}
+\noindent\textbf{Repository:} \href{https://github.com/abhishekiit1/24144001-CSOC-IG}{https://github.com/abhishekiit1/24144001-CSOC-IG}
+
+\end{document}

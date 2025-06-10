@@ -1,10 +1,10 @@
-# Sequence Modeling for Sentiment Classification using RNNs and LSTMs
+Sequence Modeling for Sentiment Classification using RNNs and LSTMs
 
 This repository contains my work for the **NLP Track (Sequence Modeling)** under the **COPS Summer of Code 2025**, Intelligence Guild, IIT (BHU) Varanasi. The objective of the project is to build and compare deep learning models based on RNN architectures for binary sentiment classification using the **Amazon Reviews dataset**.
 
 ---
 
-##Project Structure
+Project Structure
 
 ```
 .
@@ -27,7 +27,7 @@ This repository contains my work for the **NLP Track (Sequence Modeling)** under
 
 ---
 
-##Models Implemented
+Models Implemented
 
 | Model              | Description                                              |
 |-------------------|----------------------------------------------------------|
@@ -49,7 +49,7 @@ Additional plots include training loss/accuracy curves, ROC & PR curves, and gra
 
 ---
 
-##Dataset
+Dataset
 
 - **Dataset Source**: [Amazon Reviews Dataset on Kaggle](https://www.kaggle.com/datasets/kritanjalijain/amazon-reviews/data)
 - Balanced and cleaned subset used:
@@ -60,7 +60,7 @@ Additional plots include training loss/accuracy curves, ROC & PR curves, and gra
 
 ---
 
-##How to Run
+How to Run
 
 1. **Clone the repository**
    ```bash
@@ -89,7 +89,7 @@ Additional plots include training loss/accuracy curves, ROC & PR curves, and gra
 
 ---
 
-##Final Report
+Final Report
 
 The final report is located at `report/equence_modelling_basics_report_final.pdf`. It includes:
 
@@ -111,7 +111,7 @@ pip install -r requirements.txt
 
 ---
 
-##Author
+Author
 
 **Abhishek Kumar Chaubey**  
 Roll Number: `24144001`  

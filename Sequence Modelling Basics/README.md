@@ -4,7 +4,7 @@ This repository contains my work for the **NLP Track (Sequence Modeling)** under
 
 ---
 
-## 📁 Project Structure
+##Project Structure
 
 ```
 .
@@ -91,7 +91,7 @@ Additional plots include training loss/accuracy curves, ROC & PR curves, and gra
 
 ##Final Report
 
-The final report is located at `report/report.pdf`. It includes:
+The final report is located at `report/equence_modelling_basics_report_final.pdf`. It includes:
 
 - Model descriptions
 - Training & validation curves

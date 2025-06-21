@@ -64,7 +64,7 @@ The goal of this project is to explore and compare different neural machine tran
 
 ---
 
-## ❗ Notes
+##  Notes
 
 - Due to time constraints and GPU limitations, only **2 epochs** of fine-tuning were done for the Transformer model.
 - Transformer was trained on **entire dataset**, while the other models were trained on only **15k samples** for faster prototyping.
@@ -72,7 +72,7 @@ The goal of this project is to explore and compare different neural machine tran
 
 ---
 
-## 📄 Report
+##  Report
 
 The detailed report discussing:
 - Implementation strategy,
@@ -84,9 +84,7 @@ The detailed report discussing:
 
 ---
 
-## 📬 Contact
-
-For any queries or clarifications, feel free to reach out:
+##  Author
 
 - **Name**: Abhishek Chuabey  
 - **IIT BHU | CSOC 2025 NLP Track**

@@ -1,0 +1,288 @@
+\documentclass[12pt]{article}
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{array}
+\usepackage{makecell}
+
+\title{\textbf{Sequence-to-Sequence Models for English-Spanish Translation}}
+\author{Abhishek Kumar Chaubey \\
+Roll Number: 24144001 \\
+COPS Summer of Code 2025 \\
+Intelligence Guild – NLP Track}
+\date{June 21, 2025}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+This report documents the implementation and evaluation of three sequence-to-sequence models for English-to-Spanish translation as part of the COPS Summer of Code 2025 under the Intelligence Guild. The project explores fundamental sequence modeling architectures:
+
+\begin{itemize}
+    \item Vanilla sequence-to-sequence model without attention
+    \item Sequence-to-sequence model with attention mechanism
+    \item Transformer-based model using pre-trained MarianMT architecture
+\end{itemize}
+
+The core objective was to understand how different architectural choices affect translation quality, with BLEU score as the primary evaluation metric. All models were trained and evaluated on the OPUS Books parallel corpus containing English-Spanish sentence pairs.
+
+\section{Dataset Details}
+The OPUS Books dataset contains parallel English-Spanish texts from various book translations. Key dataset characteristics:
+
+\begin{itemize}
+    \item Total samples: 15,000 sentence pairs
+    \item Train/Validation/Test split: 80\%/10\%/10\%
+    \item Vocabulary sizes: 
+        \begin{itemize}
+            \item English: 14,887 tokens
+            \item Spanish: 18,542 tokens
+        \end{itemize}
+\end{itemize}
+
+The dataset was tokenized using custom tokenizers for the non-attention and attention models, while the Transformer model used the MarianMT tokenizer.
+
+\section{Preprocessing}
+Uniform preprocessing was applied across all models:
+
+\begin{enumerate}
+    \item \textbf{Text normalization:} Lowercasing and removal of special characters
+    \item \textbf{Tokenization:} Splitting text into word-level tokens
+    \item \textbf{Special tokens:} Added \texttt{<sos>}, \texttt{<eos>}, and \texttt{<pad>} tokens
+    \item \textbf{Vocabulary building:} Created word-to-index mappings with minimum frequency threshold (min\_freq=2)
+    \item \textbf{Sequence padding:} Padded sequences to maximum lengths (EN:60, ES:62 tokens)
+    \item \textbf{Dataset splitting:} Divided into train (12,000), validation (1,500), and test (1,500) sets on with and without attention implementation and for transformer trained on whole set (94k rows) with the same split. Did not train again the transformer model due to strict deadline and time constraint which leaded to lower bleu for transformer model.
+\end{enumerate}
+
+For the Transformer model, we used the MarianTokenizer which handles subword tokenization and includes language-specific special tokens.
+
+\section{Model Implementations}
+
+\subsection{Sequence-to-Sequence without Attention}
+
+\subsubsection*{Architecture}
+The baseline model consists of an encoder-decoder architecture with LSTM recurrent units:
+\begin{itemize}
+    \item \textbf{Encoder:} 
+        \begin{itemize}
+            \item Embedding layer (256 dimensions)
+            \item 2-layer LSTM with 512 hidden units
+            \item Dropout (0.1)
+        \end{itemize}
+    \item \textbf{Decoder:}
+        \begin{itemize}
+            \item Embedding layer (256 dimensions)
+            \item 2-layer LSTM with 512 hidden units
+            \item Linear output layer
+        \end{itemize}
+\end{itemize}
+
+The encoder processes the input sequence into a fixed-length context vector, which the decoder uses to generate the translated output. Teacher forcing (ratio=0.5) was applied during training to stabilize learning.
+
+\subsubsection*{Training Details}
+\begin{itemize}
+    \item Optimizer: Adam (learning rate=1e-3)
+    \item Loss function: Cross-entropy (ignoring padding tokens)
+    \item Batch size: 128
+    \item Epochs: 3
+    \item Gradient clipping: 1.0
+\end{itemize}
+
+\subsubsection*{Performance Analysis}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{train_loss_vs_epoch_without_attention}
+    \caption{Train loss decreases steadily but remains higher than with attention model after 3 epochs}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{train_loss_vs_batches_smoothed_whout_attention}
+    \caption{Batch loss shows noisy but decreasing trend (smoothed with window=20)}
+\end{figure}
+
+\textbf{Key observations:}
+\begin{itemize}
+    \item Training loss decreased from 6.82 to 6.36 over 3 epochs
+    \item High loss values indicate poor convergence
+    \item Validation BLEU: 10.01, Test BLEU: 8.56
+    \item Performance limited by information bottleneck in context vector
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{bleu_val_vs_test_without_attention}
+    \caption{Low BLEU scores indicate poor translation quality}
+\end{figure}
+
+\subsection{Sequence-to-Sequence with Attention}
+
+\subsubsection*{Architecture Enhancements}
+Added attention mechanism to address information bottleneck:
+\begin{itemize}
+    \item \textbf{Attention module:} Bahdanau-style additive attention
+    \item \textbf{Context vector:} Dynamic per-time-step context
+    \item \textbf{Decoder input:} Concatenation of embedded input and context vector
+    \item \textbf{Output:} Linear layer combining decoder output and context
+\end{itemize}
+
+\subsubsection*{Training Details}
+(Same as non-attention model)
+
+\subsubsection*{Performance Analysis}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{train_loss_vs_epoch_with_attention}
+    \caption{Faster convergence and lower loss compared to non-attention model}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{train_loss_vs_batches_with_attention}
+    \caption{Smoother loss decrease indicates more stable training}
+\end{figure}
+
+\textbf{Key observations:}
+\begin{itemize}
+    \item Training loss decreased from 6.65 to 6.26 over 3 epochs
+    \item Validation BLEU: 61.48, Test BLEU: 67.24
+    \item 7x improvement over non-attention model
+    \item Attention enables learning alignment between source and target
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{bleu_val_vs_test_with_attention}
+    \caption{Dramatic BLEU score improvement with attention mechanism}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{bleu_comparison_with_vs_without_attention}
+    \caption{Attention provides transformative performance improvement}
+\end{figure}
+
+\subsection{Transformer Model}
+
+\subsubsection*{Architecture}
+Used the MarianMT pre-trained transformer architecture:
+\begin{itemize}
+    \item \textbf{Encoder:} 6-layer transformer with self-attention
+    \item \textbf{Decoder:} 6-layer transformer with encoder-decoder attention
+    \item \textbf{Embedding dimension:} 512
+    \item \textbf{Attention heads:} 8
+    \item \textbf{Feed-forward dimension:} 2048
+\end{itemize}
+
+\subsubsection*{Training Details}
+\begin{itemize}
+    \item Pre-trained model: Helsinki-NLP/opus-mt-en-es
+    \item Fine-tuning epochs: 2
+    \item Batch size: 16
+    \item Learning rate: 2e-5
+    \item Sequence length: 64 tokens
+    \item Optimizer: AdamW
+\end{itemize}
+
+\subsubsection*{Performance Analysis}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{train_val_loss_vs_epoch_transformer}
+    \caption{Steady decrease in both training and validation loss}
+\end{figure}
+
+\textbf{Key observations:}
+\begin{itemize}
+    \item Pre-trained model BLEU: 14.89 (without fine-tuning)
+    \item After 1 epoch: BLEU 18.42
+    \item After 2 epochs: BLEU 19.19 (validation), 19.55 (test)
+    \item 30\% improvement over pre-trained model
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{val_bleu_vs_epoch_transformer}
+    \caption{Progressive improvement in BLEU with fine-tuning}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{final_bleu_val_vs_test_transformer}
+    \caption{Consistent performance between validation and test sets}
+\end{figure}
+\subsection{Justification for lower bleu scores for transformer implementation}
+\begin{itemize}
+    \item  Training Interrupted Due to Time Constraints: The training was limited to only 2 epochs due to time constraints imposed by submission deadlines. Since each epoch took approximately 45 minutes on my system (NVIDIA RTX 2050), continuing for more epochs to reach full convergence was not feasible.
+    \item Larger Dataset Trained with Transformer Model: Unlike the RNN and LSTM models which were trained on a sampled subset of 15,000 sentence pairs due to computational limitations, the Transformer model was trained on the full dataset (94k sentence pairs). This increased the training time per epoch significantly, making it infeasible to run many epochs within the given time. As a result, despite having access to more data, the Transformer’s performance was capped due to early stopping.
+    \item BLEU Scores Improved, But Plateaued Early: Although BLEU scores showed noticeable improvement from 14.89 (pretrained) to 19.19 (after 2 epochs), the rate of improvement slowed significantly by the second epoch, indicating the model needed more time and epochs to reach a stronger performance ceiling
+    \item No Beam Search or Length Penalty Used in Inference: The model used greedy decoding (no beam search or length penalty tuning) during evaluation. This likely resulted in sub-optimal translations, especially for longer or structurally complex sentences, reducing BLEU scores.
+\end{itemize}
+
+\section{Evaluation Metrics}
+The primary evaluation metric was BLEU (Bilingual Evaluation Understudy) score, which measures n-gram overlap between generated and reference translations. Additional metrics:
+
+\begin{itemize}
+    \item Training loss (cross-entropy)
+    \item Validation loss
+
+\end{itemize}
+
+BLEU scores were calculated using sacreBLEU implementation for standardized comparison.
+
+\section{Comparative Results}
+
+\begin{table}[H]
+\centering
+\caption{Model Performance Comparison}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Model} & \textbf{Val BLEU} & \textbf{Test BLEU}\\
+\hline
+Seq2Seq (no attention) & 10.01 & 8.56\\
+Seq2Seq (attention) & 61.48 & 67.24\\
+Transformer (MarianMT) & 19.19 & 19.55\\
+\hline
+\end{tabular}
+\end{table}
+
+
+
+\section{Key Observations}
+
+\begin{enumerate}
+    \item \textbf{Attention mechanism:} The most significant improvement came from adding attention (+53 BLEU), enabling the model to align source and target words effectively.
+    
+    \item \textbf{Information bottleneck:} Without attention, the fixed-length context vector severely limited performance, especially for longer sequences.
+    
+    \item \textbf{Pre-trained transformers:} Despite lower BLEU than attention model, transformer provides more fluent translations and handles rare words better through subword tokenization.
+    
+    \item \textbf{Overfitting:} The attention model showed slight overfitting (higher test than validation BLEU), likely due to limited training data.
+    
+\end{enumerate}
+
+\section{Conclusion}
+This project demonstrates the comparison of sequence-to-sequence models for machine translation:
+
+\begin{itemize}
+    \item The vanilla seq2seq model without attention served as an effective baseline but showed fundamental limitations in handling information flow.
+    \item Adding attention mechanisms resulted in dramatic performance improvements, validating its importance for sequence modeling.
+    \item The transformer architecture, while computationally heavier, provides a powerful alternative through parallel processing and multi-head attention.
+
+\end{itemize}
+
+For English-Spanish translation, the attention-based seq2seq model achieved the highest BLEU score, while the transformer provided lesser bleu scores due to lesser number of epochs and training on whole dataset. Future work could explore hybrid approaches, larger datasets, and techniques like beam search for further improvements.
+
+\vspace{1em}
+\noindent\textbf{Repository:} \href{https://github.com/abhishekiit1/24144001-CSOC-IG}{https://github.com/abhishekiit1/24144001-CSOC-IG}
+
+\end{document}

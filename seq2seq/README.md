@@ -35,8 +35,6 @@ The goal of this project is to explore and compare different neural machine tran
 
 - **BLEU Score**: Calculated on both validation and test sets.
 - **Loss Curves**: Plotted for training and validation over epochs.
-- **Inference Speed**: Considered qualitatively (Transformer model takes longer due to full dataset training).
-
 ---
 
 ##  Dataset
